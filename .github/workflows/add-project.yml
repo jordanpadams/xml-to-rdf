@@ -11,7 +11,7 @@ jobs:
       - name: Add issue to matching project
         uses: actions/github-script@v6
         with:
-          token: ${{ github.token }}
+          github-token: ${{ github.token }}
           script: |
             // Get the label name from the event payload.
             const labelName = context.payload.label.name;

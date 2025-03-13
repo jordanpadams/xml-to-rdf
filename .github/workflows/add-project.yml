@@ -1,0 +1,65 @@
+name: Add GitHub Project to Issue
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  add-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add issue to matching project
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Get the label name from the event payload.
+            const labelName = context.payload.label.name;
+            console.log("Label applied:", labelName);
+
+            // Set repository owner and name.
+            const { owner, repo } = context.repo;
+
+            // Query to list all ProjectsV2 in the repository.
+            const query = `
+              query($owner: String!, $repo: String!) {
+                repository(owner: $owner, name: $repo) {
+                  projectsV2(first: 100) {
+                    nodes {
+                      id
+                      title
+                    }
+                  }
+                }
+              }
+            `;
+            const projectsData = await github.graphql(query, { owner, repo });
+            const projects = projectsData.repository.projectsV2.nodes;
+            console.log("Projects found:", projects);
+
+            // Look for a project whose title matches the label name (case-insensitive).
+            const matchingProject = projects.find(project => project.title.toLowerCase() === labelName.toLowerCase());
+            if (!matchingProject) {
+              console.log(`No project matching the label '${labelName}' was found.`);
+              return;
+            }
+            console.log(`Found matching project: ${matchingProject.title} (ID: ${matchingProject.id})`);
+
+            // Prepare and execute the mutation to add the issue to the project.
+            const mutation = `
+              mutation($projectId: ID!, $contentId: ID!) {
+                addProjectV2Item(input: {projectId: $projectId, contentId: $contentId}) {
+                  item {
+                    id
+                  }
+                }
+              }
+            `;
+            // The issue’s node ID is used as the content identifier.
+            const contentId = context.payload.issue.node_id;
+            const result = await github.graphql(mutation, {
+              projectId: matchingProject.id,
+              contentId: contentId
+            });
+            console.log("Issue added to project:", result);
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
